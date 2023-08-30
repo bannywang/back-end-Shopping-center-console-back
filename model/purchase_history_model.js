@@ -581,6 +581,25 @@ async function update_user_grade(user_id) {
     }
 }
 
+// (訂單發貨)更新使用者購買總額
+async function create_user_CA(user_id, sum) {
+    try {
+        // 更新使用者的 purchase_CA
+        const update_query = `
+              UPDATE user_data
+              SET purchase_CA = purchase_CA + ?
+              WHERE id = ?
+          `
+        const update_values = [sum, user_id]
+        await connection.query(update_query, update_values)
+
+        console.log('使用者的累積消費總額更新成功')
+        return true
+    } catch (error) {
+        console.error('無法更新使用者的 purchase_CA:', error)
+    }
+}
+
 module.exports = {
     get_purchase_history,
     use_user_id_get_history,
@@ -595,4 +614,5 @@ module.exports = {
     get_detailed_end_history,
     update_user_grade,
     update_user_CA,
+    create_user_CA,
 }
