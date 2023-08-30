@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <div id="jsonContainer"></div>
+
+    <script>
+      // 從後端獲取 JSON 資料
+      fetch('/stepbrothers/all_purchase_history_page')
+        .then((response) => response.json())
+        .then((purchase) => {
+          // 將 JSON 資料渲染到 HTML 元素中
+          const jsonContainer = document.getElementById('jsonContainer');
+          jsonContainer.textContent = JSON.stringify(purchase, null, 2); // 格式化和縮排 JSON
+        })
+        .catch((error) => {
+          console.error('無法獲取 JSON 資料：', error);
+        });
+    </script>
+  </body>
+</html>
