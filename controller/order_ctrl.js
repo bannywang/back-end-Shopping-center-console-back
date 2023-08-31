@@ -10,7 +10,7 @@ async function purchase_history(req, res) {
         if (id_card) {
             const purchase = await history.get_detailed_purchase_history()
             console.log(purchase)
-            res.json(purchase)
+            res.json(purchase.reverse())
         } else {
             res.json({ login_status: false })
         }
@@ -101,6 +101,7 @@ async function update_order(req, res) {
                 await product.return_stock(product_name, size_id, quantity)
             }
         }
+
         if (status == 4) {
             await history.create_user_CA(result[0].user_id, result[0].sum)
             await history.update_user_grade(result[0].user_id)

@@ -1,6 +1,7 @@
 const { connection } = require('../data/connection_model')
 const tools = require('./tool_model')
 
+// add_new_administrator('banny1234','12345','ben2002204@gmail.com','0976876123')
 // 新增管理員
 async function add_new_administrator(account, password, email, phone) {
     try {

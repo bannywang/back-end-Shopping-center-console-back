@@ -33,10 +33,11 @@ async function use_user_id_get_history(user_id) {
     try {
         // 檢查使用者存在性
         const check_user_query = `
-      SELECT id
-      FROM user_data
-      WHERE id = ?
-    `
+            SELECT id
+            FROM user_data
+            WHERE id = ?
+        `
+
         const check_user_values = [user_id]
         const [user_results] = await connection.query(check_user_query, check_user_values)
 
@@ -45,11 +46,12 @@ async function use_user_id_get_history(user_id) {
             return false
         }
 
+        // 執行查詢: 獲取歷史訂單
         const query = `
             SELECT ph.id, ud.id AS user_id, ph.recipient_name, ph.recipient_phone, ph.recipient_address, pb.brand_name, pdetail.product_name, pdetail.price, ps.us_size, sc.id AS shopping_cart_id, ph.quantity, (pdetail.price * ph.quantity) AS subtotal, ph.sum, ph.purchase_status, DATE_FORMAT(ph.create_time, '%Y-%m-%d %H:%i:%s') AS create_time
             FROM purchase_history ph
             JOIN user_data ud ON ph.user_id = ud.id
-            JOIN shopping_car sc ON ph.product_id = sc.id
+            JOIN shopping_cart sc ON ph.product_id = sc.id
             JOIN product_detail pdetail ON sc.product_id = pdetail.id
             JOIN product_data pdata ON sc.product_id = pdata.id
             JOIN product_brand pb ON pdata.brand_id = pb.id
@@ -216,19 +218,20 @@ async function get_order_total_number_in_interval(start_date, end_date) {
 // 1 = 準備中，2 = 審核中，3 = 已取消，4 = 已出貨 (異動內容，加入不可逆判定，ＪＹ)
 async function use_status_get_history_purchase(status_num) {
     try {
-        let status_condition = '' // 用於儲存狀態的條件字串
+        // 使用物件映射狀態編號到對應的條件
+        const statusConditions = {
+            1: 'purchase_status = 1', // 準備中的狀態
+            2: 'purchase_status = 2', // 審核中的狀態
+            3: 'purchase_status = 3', // 已取消的狀態
+            4: 'purchase_status = 4', // 已出貨的狀態
+        }
 
-        if (status_num === 1) {
-            status_condition = 'purchase_status = 1' // 準備中的狀態
-        } else if (status_num === 2) {
-            status_condition = 'purchase_status = 2' // 審核中的狀態
-        } else if (status_num === 3) {
-            status_condition = 'purchase_status = 3' // 已取消的狀態
-        } else if (status_num === 4) {
-            status_condition = 'purchase_status = 4' // 已出貨的狀態
-        } else {
+        // 檢查傳入的狀態編號是否有效
+        if (!(status_num in statusConditions)) {
             return [] // 若傳入無效的狀態值，回傳空陣列
         }
+
+        const status_condition = statusConditions[status_num]
 
         // 構建 SQL 查詢語句
         const query = `
@@ -262,16 +265,17 @@ async function get_detailed_purchase_history() {
     try {
         // 定義 SQL 查詢，獲取歷史訂單的詳細資訊
         const query = `
-      SELECT ph.id, ud.id AS user_id, ud.name, ph.recipient_name, ph.recipient_phone, ph.recipient_address, pb.brand_name, pdetail.product_name, ps.us_size AS size, pdetail.price, sc.quantity, (pdetail.price * sc.quantity) AS subtotal, ph.sum, ph.purchase_status, DATE_FORMAT(ph.create_time, '%Y-%m-%d %H:%i:%s') AS create_time
-      FROM purchase_history ph
-      JOIN shopping_car sc ON ph.product_id = sc.id
-      JOIN product_detail pdetail ON sc.product_id = pdetail.id
-      JOIN product_data pdata ON sc.product_id = pdata.id
-      JOIN product_brand pb ON pdata.brand_id = pb.id
-      JOIN product_size ps ON sc.size_id = ps.id
-      JOIN user_data ud ON ph.user_id = ud.id
-      ORDER BY ph.create_time ASC
-    `
+            SELECT ph.id, ud.id AS user_id, ud.name, ph.recipient_name, ph.recipient_phone, ph.recipient_address, pb.brand_name, pdetail.product_name, ps.us_size AS size, pdetail.price, sc.quantity, (pdetail.price * sc.quantity) AS subtotal, ph.sum, ph.purchase_status, DATE_FORMAT(ph.create_time, '%Y-%m-%d %H:%i:%s') AS create_time
+            FROM purchase_history ph
+            JOIN shopping_car sc ON ph.product_id = sc.id
+            JOIN product_detail pdetail ON sc.product_id = pdetail.id
+            JOIN product_data pdata ON sc.product_id = pdata.id
+            JOIN product_brand pb ON pdata.brand_id = pb.id
+            JOIN product_size ps ON sc.size_id = ps.id
+            JOIN user_data ud ON ph.user_id = ud.id
+            ORDER BY ph.create_time ASC
+        `
+
         // 執行 SQL 查詢並獲取結果
         const [results] = await connection.query(query)
 
@@ -317,8 +321,9 @@ async function get_detailed_purchase_history() {
         // 返回分組後的歷史訂單資料
         return grouped_data
     } catch (error) {
-        // 如果有錯誤發生，輸出錯誤訊息
+        // 如果有錯誤發生，輸出錯誤訊息並返回空數組
         console.error('無法獲取所有歷史訂單:', error)
+        return []
     }
 }
 
@@ -327,17 +332,17 @@ async function get_user_only_purchase_history(user_id, time) {
     try {
         // 定義 SQL 查詢，獲取指定使用者在特定時間的歷史訂單的詳細資訊
         const query = `
-        SELECT ph.id, ud.id AS user_id, ud.name, ph.recipient_name, ph.recipient_phone, ph.recipient_address, pb.brand_name, pdetail.product_name, ps.us_size AS size, pdetail.price, sc.quantity, (pdetail.price * sc.quantity) AS subtotal, ph.sum, ph.purchase_status, DATE_FORMAT(ph.create_time, '%Y-%m-%d %H:%i:%s') AS create_time
-        FROM purchase_history ph
-        JOIN shopping_car sc ON ph.product_id = sc.id
-        JOIN product_detail pdetail ON sc.product_id = pdetail.id
-        JOIN product_data pdata ON sc.product_id = pdata.id
-        JOIN product_brand pb ON pdata.brand_id = pb.id
-        JOIN product_size ps ON sc.size_id = ps.id
-        JOIN user_data ud ON ph.user_id = ud.id
-        WHERE ph.user_id = ? AND ph.create_time = ?
-        ORDER BY ph.create_time ASC
-      `
+            SELECT ph.id, ud.id AS user_id, ud.name, ph.recipient_name, ph.recipient_phone, ph.recipient_address, pb.brand_name, pdetail.product_name, ps.us_size AS size, pdetail.price, sc.quantity, (pdetail.price * sc.quantity) AS subtotal, ph.sum, ph.purchase_status, DATE_FORMAT(ph.create_time, '%Y-%m-%d %H:%i:%s') AS create_time
+            FROM purchase_history ph
+            JOIN shopping_car sc ON ph.product_id = sc.id
+            JOIN product_detail pdetail ON sc.product_id = pdetail.id
+            JOIN product_data pdata ON sc.product_id = pdata.id
+            JOIN product_brand pb ON pdata.brand_id = pb.id
+            JOIN product_size ps ON sc.size_id = ps.id
+            JOIN user_data ud ON ph.user_id = ud.id
+            WHERE ph.user_id = ? AND ph.create_time = ?
+            ORDER BY ph.create_time ASC
+        `
 
         // 執行 SQL 查詢並獲取結果
         const [results] = await connection.query(query, [user_id, time])
@@ -380,11 +385,13 @@ async function get_user_only_purchase_history(user_id, time) {
             // 計算目前分組的總金額
             current_group.sum += item.sum
         })
+
         // 返回分組後的歷史訂單資料
         return grouped_data
     } catch (error) {
-        // 如果有錯誤發生，輸出錯誤訊息
+        // 如果有錯誤發生，輸出錯誤訊息並返回空數組
         console.error('無法獲取指定使用者的歷史訂單:', error)
+        return []
     }
 }
 
@@ -522,7 +529,7 @@ async function update_purchase_status(user_id, time, new_status) {
     }
 }
 
-// 更新使用者購買總額 (SQL Table user_data.purchase_CA = purchase_CA - sum)
+//(取消訂單) 更新使用者購買總額 (SQL Table user_data.purchase_CA = purchase_CA - sum)
 async function update_user_CA(user_id, sum) {
     try {
         // 先檢查使用者是否存在
@@ -567,6 +574,25 @@ async function update_user_CA(user_id, sum) {
     }
 }
 
+// (訂單發貨)更新使用者購買總額
+async function create_user_CA(user_id, sum) {
+    try {
+        // 更新使用者的 purchase_CA
+        const update_query = `
+              UPDATE user_data
+              SET purchase_CA = purchase_CA + ?
+              WHERE id = ?
+          `
+        const update_values = [sum, user_id]
+        await connection.query(update_query, update_values)
+
+        console.log('使用者的累積消費總額更新成功')
+        return true
+    } catch (error) {
+        console.error('無法更新使用者的 purchase_CA:', error)
+    }
+}
+
 // 更新使用者等級 (抓取該使用者的消費總額來決定等級)
 async function update_user_grade(user_id) {
     try {
@@ -607,25 +633,6 @@ async function update_user_grade(user_id) {
         }
     } catch (error) {
         console.error('無法更新使用者等級:', error)
-    }
-}
-
-// (訂單發貨)更新使用者購買總額
-async function create_user_CA(user_id, sum) {
-    try {
-        // 更新使用者的 purchase_CA
-        const update_query = `
-              UPDATE user_data
-              SET purchase_CA = purchase_CA + ?
-              WHERE id = ?
-          `
-        const update_values = [sum, user_id]
-        await connection.query(update_query, update_values)
-
-        console.log('使用者的累積消費總額更新成功')
-        return true
-    } catch (error) {
-        console.error('無法更新使用者的 purchase_CA:', error)
     }
 }
 
