@@ -9,7 +9,7 @@ const path = require('path')
 
 // 存取圖片路徑判定
 async function getCurrentFolders(category) {
-    const basePath = './public/products' // 設定為你的絕對路徑
+    const basePath = 'C:/Users/88697/OneDrive/桌面/鞋子專案前端/0828/public/products' // 設定為你的絕對路徑
     const categoryPaths = {
         1: 'man',
         2: 'woman',

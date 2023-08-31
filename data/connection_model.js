@@ -4,7 +4,7 @@ const mysql = require('mysql2/promise')
 const connection = mysql.createPool({
     host: '127.0.0.1',
     user: 'root',
-    password: '0229',
+    password: '0229', //自己資料庫的密碼
     database: 'e-commerce-website',
 })
 

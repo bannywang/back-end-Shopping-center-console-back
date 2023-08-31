@@ -27,11 +27,14 @@ async function create_product_brand(brand_name) {
         const insert_query = `INSERT INTO product_brand (brand_name) VALUES (?)`
         await connection.query(insert_query, [brand_name])
         console.log('品牌已新增')
-        get_product_brand()
+
+        // 如果需要在成功新增品牌後取得最新品牌資料，請將以下行解除註釋
+        // const brandData = await get_product_brand();
+
         return true // 回傳 true 代表品牌新增成功
     } catch (error) {
         console.error('無法新增品牌:', error)
-        return false // 回傳 false 代表品牌新增失敗
+        throw new Error('無法新增品牌') // 拋出自訂錯誤
     }
 }
 
@@ -39,16 +42,16 @@ async function create_product_brand(brand_name) {
 async function check_brand_exists(brand_name) {
     try {
         const check_query = `
-            SELECT COUNT(*) as count
-            FROM product_brand
-            WHERE brand_name = ?
-        `
+          SELECT COUNT(*) as count
+          FROM product_brand
+          WHERE brand_name = ?
+      `
         const [checkResults] = await connection.query(check_query, [brand_name])
         const count = checkResults[0].count
         return count > 0
     } catch (error) {
         console.error('檢查品牌是否已存在時發生錯誤:', error)
-        return true // 假設發生錯誤時，回傳 true，代表品牌已存在（避免錯誤狀況）
+        throw new Error('無法檢查品牌是否已存在') // 拋出自訂錯誤
     }
 }
 
@@ -58,16 +61,12 @@ async function check_brand_existence(brand_id) {
         const query = 'SELECT id FROM product_brand WHERE id = ?'
         const [results] = await connection.query(query, [brand_id])
 
-        if (results.length > 0) {
-            console.log(`品牌 ID ${brand_id} 存在`)
-            return true // 若有結果則代表品牌存在
-        } else {
-            console.log(`品牌 ID ${brand_id} 不存在`)
-            return false // 若無結果則代表品牌不存在
-        }
+        const brandExists = results.length > 0
+        console.log(`品牌 ID ${brand_id} ${brandExists ? '存在' : '不存在'}`)
+        return brandExists
     } catch (error) {
         console.error('無法檢查品牌存在性:', error)
-        return false // 回傳 false 代表檢查失敗
+        throw new Error('無法檢查品牌存在性') // 拋出自訂錯誤
     }
 }
 
@@ -78,9 +77,12 @@ async function update_product_brand(id, brand_name) {
         const update_values = [brand_name, id]
         await connection.query(update_query, update_values)
         console.log('資料更新成功')
-        get_product_brand()
+
+        // 如果需要在成功更新後取得最新品牌資料，請將以下行解除註釋
+        // get_product_brand();
     } catch (error) {
         console.error('無法更新資料:', error)
+        throw new Error('無法更新資料') // 拋出自訂錯誤
     }
 }
 
@@ -90,12 +92,12 @@ async function use_brand_name_get_brand_data(brand_name) {
         // 將品牌名稱轉換成不分大小寫的形式，以進行比對
         const lowercaseBrandName = brand_name.toLowerCase()
 
-        // 定義 SQL 查詢，使用 LIKE 子句以進行模糊比對，並使用 LOWER 函數進行不分大小寫比對
+        // 定義 SQL 查詢，使用 LIKE 子句進行模糊比對，並使用 LOWER 函數進行不分大小寫比對
         const query = `
-          SELECT *
-          FROM product_brand
-          WHERE LOWER(brand_name) LIKE ?
-        `
+        SELECT *
+        FROM product_brand
+        WHERE LOWER(brand_name) LIKE ?
+      `
 
         // 執行 SQL 查詢，將資料庫中符合條件的品牌資料取出
         const [results] = await connection.query(query, [`%${lowercaseBrandName}%`])
@@ -103,7 +105,7 @@ async function use_brand_name_get_brand_data(brand_name) {
         return results // 回傳符合條件的品牌資料
     } catch (error) {
         console.error('無法獲取品牌資料:', error)
-        return [] // 回傳空陣列表示發生錯誤或沒有符合條件的品牌資料
+        throw new Error('無法獲取品牌資料') // 拋出自訂錯誤
     }
 }
 
@@ -390,17 +392,19 @@ async function update_product_data_status(product_id, new_status) {
 // 商品價格、狀態及庫存異動
 async function update_product_status_and_stock(product_id, product_status, size_stock, price) {
     try {
-        update_product_data_status(product_id, product_status)
-        update_product_price(product_id, price)
+        await update_product_data_status(product_id, product_status)
+        await update_product_price(product_id, price)
+
         for (let i = 0; i < size_stock.length; i++) {
             const size = size_stock[i].size
             const stock = size_stock[i].stock
-            create_product_stock_quantity(product_id, size, stock)
+            await create_product_stock_quantity(product_id, size, stock)
         }
-        return true
+
+        return true // 所有操作成功完成
     } catch (error) {
         console.error('無法更新商品狀態或庫存:', error)
-        return false
+        return false // 操作失敗
     }
 }
 
@@ -477,64 +481,62 @@ async function use_class_id_get_product(id) {
 }
 
 // product id 篩選商品  (1~45筆資料)
-async function use_product_id_get_product(id) {
+async function use_product_id_get_product(product_id) {
     try {
+        // 定義 SQL 查詢
         const query = `
-      SELECT pd.id, pb.brand_name, pdd.product_name, pdd.price, pc.class, pd.product_data_status
-      FROM product_data pd
-      JOIN product_brand pb ON pd.brand_id = pb.id
-      JOIN product_detail pdd ON pd.detail_id = pdd.id
-      JOIN product_class pc ON pd.class_id = pc.id
-      WHERE pd.id = ?
-    `
-        const [results] = await connection.query(query, [id])
+          SELECT pd.id, pb.brand_name, pdd.product_name, pdd.price, pc.class, pd.product_data_status
+          FROM product_data pd
+          JOIN product_brand pb ON pd.brand_id = pb.id
+          JOIN product_detail pdd ON pd.detail_id = pdd.id
+          JOIN product_class pc ON pd.class_id = pc.id
+          WHERE pd.id = ?
+      `
+
+        const [results] = await connection.query(query, [product_id])
 
         // 如果查詢結果為空（即沒有找到對應的商品），返回 false
         if (results.length === 0) {
-            console.log(`找不到 ID 為 ${id} 的商品資料`)
+            console.log(`找不到 ID 為 ${product_id} 的商品資料`)
             return false
         }
 
-        console.log(`ID 為 ${id} 的商品資料`, results)
+        console.log(`ID 為 ${product_id} 的商品資料`, results)
         return results
     } catch (error) {
         console.error('無法獲取商品資料:', error)
-        return false // 返回 false 表示處理出現錯誤
+        throw new Error('無法獲取商品資料') // 拋出自訂錯誤
     }
 }
 
 // 上傳產品
 async function create_detail_and_product_data(brand_id, product_name, price, class_id) {
-    const conn = await connection.getConnection()
+    const conn = await connection.getConnection() // 獲取數據庫連接
+
     try {
-        // 首先檢查 product_name 是否已經存在
+        await conn.beginTransaction() // 開始事務
+
         const existing_detail = await use_product_name_get_detail_data(product_name)
 
         if (existing_detail) {
             console.log(`產品名稱 ${product_name} 已經存在`)
-            return false // 回傳 false 代表資料已存在
+            return false // 如果產品名稱已存在，返回 false
         }
 
-        // 檢查 brand_id 是否存在於品牌表格中
         const existing_brand = await check_brand_existence(brand_id)
 
         if (!existing_brand) {
             console.log(`品牌 ID ${brand_id} 不存在`)
-            return false // 回傳 false 代表品牌不存在
+            return false // 如果品牌不存在，返回 false
         }
 
-        // 檢查 class_id 是否存在於類別表格中
         const existing_class = await check_class_existence(class_id)
 
         if (!existing_class) {
             console.log(`類別 ID ${class_id} 不存在`)
-            return false // 回傳 false 代表類別不存在
+            return false // 如果類別不存在，返回 false
         }
 
-        // 事務開始，確保在一個連續操作中維持一致性
-        await conn.beginTransaction()
-
-        // 插入產品細節資料到 product_detail 表
         const detail_query = 'INSERT INTO product_detail (product_name, price) VALUES (?, ?)'
         const detail_values = [product_name, price]
         const [detail_result] = await conn.query(detail_query, detail_values)
@@ -542,13 +544,12 @@ async function create_detail_and_product_data(brand_id, product_name, price, cla
         if (detail_result.affectedRows !== 1) {
             console.log('細節資料新增失敗')
             await conn.rollback() // 回滾事務
-            return false
+            return false // 如果細節資料新增失敗，返回 false
         }
 
         console.log('細節資料已新增')
         const detail_id = detail_result.insertId
 
-        // 插入 product_data 資料，使用剛剛取得的 detail_id
         const product_data_query = 'INSERT INTO product_data (brand_id, detail_id, class_id) VALUES (?, ?, ?)'
         const product_data_values = [brand_id, detail_id, class_id]
         const [product_data_result] = await conn.query(product_data_query, product_data_values)
@@ -556,13 +557,12 @@ async function create_detail_and_product_data(brand_id, product_name, price, cla
         if (product_data_result.affectedRows !== 1) {
             console.log('product_data 資料新增失敗')
             await conn.rollback() // 回滾事務
-            return false
+            return false // 如果product_data 資料新增失敗，返回 false
         }
 
         console.log('product_data 資料已新增')
         const product_data_id = product_data_result.insertId
 
-        // 插入 product_stock 資料，使用剛剛取得的 detail_id 和 size_id
         const size_query = 'SELECT id FROM product_size'
         const [size_results] = await conn.query(size_query)
         const size_ids = size_results.map((result) => result.id)
@@ -576,18 +576,19 @@ async function create_detail_and_product_data(brand_id, product_name, price, cla
 
         console.log('product_stock 資料已新增')
 
-        // 提交事務
-        await conn.commit()
+        await conn.commit() // 提交事務
 
-        return true // 回傳 true 代表資料新增成功
+        return true // 如果所有操作成功，返回 true
     } catch (error) {
-        // 如果有錯誤發生，輸出錯誤訊息，回滾事務
         console.error('無法新增資料:', error)
-        await conn.rollback()
-        return false // 回傳 false 代表資料新增失敗
+
+        // 可以將錯誤信息記錄到日誌或進一步處理錯誤
+        // logErrorToLogFile(error);
+
+        await conn.rollback() // 回滾事務
+        return false // 如果發生錯誤，返回 false
     } finally {
-        // 無論成功或失敗，最終都要釋放連線
-        conn.release()
+        conn.release() // 釋放數據庫連接
     }
 }
 
