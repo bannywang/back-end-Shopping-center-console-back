@@ -105,26 +105,55 @@ async function get_order_by_id(id) {
 // 查找歷史訂單資料  (取消 or 完成)
 async function get_end_history() {
     try {
+        // 定義 SQL 查詢，獲取歷史訂單的詳細資訊，僅限 purchase_status 為 3 和 4 的訂單
         const query = `
-        SELECT id, user_id, recipient_name, recipient_phone, recipient_address, product_id, quantity, subtotal, sum, purchase_status, create_time
-        FROM purchase_history
-        WHERE purchase_status IN (3, 4);
+        SELECT ph.id, ud.id AS user_id, ud.name, ph.recipient_name, ph.recipient_phone, ph.recipient_address, pb.brand_name, pdetail.product_name, ps.us_size AS size, pdetail.price, sc.quantity, (pdetail.price * sc.quantity) AS subtotal, ph.sum, ph.purchase_status, DATE_FORMAT(ph.create_time, '%Y-%m-%d %H:%i:%s') AS create_time
+        FROM purchase_history ph
+        JOIN shopping_car sc ON ph.product_id = sc.id
+        JOIN product_detail pdetail ON sc.product_id = pdetail.id
+        JOIN product_data pdata ON sc.product_id = pdata.id
+        JOIN product_brand pb ON pdata.brand_id = pb.id
+        JOIN product_size ps ON sc.size_id = ps.id
+        JOIN user_data ud ON ph.user_id = ud.id
+        WHERE ph.purchase_status IN (3, 4)  -- 只選取 purchase_status 為 3 和 4 的訂單
+        ORDER BY ph.create_time ASC
       `
-
+        // 執行 SQL 查詢並獲取結果
         const [results] = await connection.query(query)
-        const formatted_results = results.map((history) => {
-            history.create_time = format_date_time(history.create_time)
-            return history
+
+        // 儲存分組後的歷史訂單資料
+        const grouped_data = []
+        let current_group = null
+
+        // 遍歷查詢結果進行分組處理
+        results.forEach((item) => {
+            const createTime = item.create_time
+            // 如果目前的分組不存在，或者與上一個分組的時間不同，則創建一個新分組
+            if (!current_group || current_group.time !== createTime) {
+                current_group = {
+                    id: item.id,
+                    time: createTime,
+                    user_id: item.user_id,
+                    name: item.name,
+                    recipient_name: item.recipient_name,
+                    recipient_phone: item.recipient_phone,
+                    recipient_address: item.recipient_address,
+                    purchase_status: item.purchase_status,
+                    sum: item.sum,
+                }
+                // 將新分組加入 grouped_data 陣列
+                grouped_data.push(current_group)
+            }
+
+            // 計算目前分組的總金額
+            current_group.sum += item.sum
         })
 
-        // 檢查查詢結果中是否有資料行
-        if (formatted_results.length > 0) {
-            return formatted_results
-        } else {
-            console.log('無符合條件的資料')
-        }
+        // 返回分組後的歷史訂單資料（不包含 purchases 詳細資料）
+        return grouped_data
     } catch (error) {
-        console.error('無法執行查詢：', error)
+        // 如果有錯誤發生，輸出錯誤訊息
+        console.error('無法獲取所有歷史訂單:', error)
     }
 }
 
